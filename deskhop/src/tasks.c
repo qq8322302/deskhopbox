@@ -27,7 +27,7 @@ void task_scheduler(device_t *state, task_t *task) {
     task->exec(state);
 }
 
-/**================================================== *
+/* ================================================== *
  * ==============  Watchdog Functions  ============== *
  * ================================================== */
 
@@ -46,7 +46,7 @@ void kick_watchdog_task(device_t *state) {
         watchdog_update();
 }
 
-/**================================================== *
+/* ================================================== *
  * ===============  USB Device / Host  ============== *
  * ================================================== */
 
@@ -77,9 +77,8 @@ mouse_report_t *screensaver_pong(device_t *state) {
 }
 
 mouse_report_t *screensaver_jitter(device_t *state) {
-    const int16_t jitter_distance = 2;
     static mouse_report_t report = {
-        .y = jitter_distance,
+        .y = JITTER_DISTANCE,
         .mode = RELATIVE,
     };
     report.y = -report.y;
@@ -118,6 +117,11 @@ void screensaver_task(device_t *state) {
     /* We're active! Now check if it's time to move the cursor yet. */
     if (time_us_32() - last_pointer_move < delays[screensaver->mode])
         return;
+
+    /* Return, if we're not connected or the host is suspended */
+    if(!tud_ready()) {
+        return;
+    }
 
     mouse_report_t *report;
     switch (screensaver->mode) {
@@ -188,7 +192,7 @@ void process_hid_queue_task(device_t *state) {
 
     /* ... then we can remove it from the queue. Race conditions shouldn't happen [tm] */
     if (succeeded)
-	queue_try_remove(&state->hid_queue_out, &packet);
+        queue_try_remove(&state->hid_queue_out, &packet);
 }
 
 /* Task that handles copying firmware from the other device to ours */
