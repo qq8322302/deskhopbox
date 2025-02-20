@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.6)
 
 ## Version Configuration
 set(VERSION_MAJOR 00)
-set(VERSION_MINOR 162)
+set(VERSION_MINOR 170)
 
 ## Release Type Selection
 option(DH_DEBUG "Build a debug version" OFF)
@@ -90,6 +90,7 @@ set(COMMON_LINK_LIBRARIES
   tinyusb_device 
   tinyusb_host
   pico_multicore
+  pico_unique_id
   Pico-PIO-USB
 )
 set(binary deskhop)
