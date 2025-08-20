@@ -7,7 +7,7 @@
 
 原工程访问：**[hrvach/deskhop](https://github.com/hrvach/deskhop)**
 
-该工程当前基于原工程 **[v0.71](https://github.com/hrvach/deskhop/releases/tag/v0.71)** 制作。
+该工程当前基于原工程 **[v0.73](https://github.com/hrvach/deskhop/releases/tag/v0.73)** 制作。
 
 
 

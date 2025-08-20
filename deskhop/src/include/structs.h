@@ -100,6 +100,10 @@ typedef struct {
     uint8_t active_output;               // Currently selected output (0 = A, 1 = B)
     uint8_t board_role;                  // Which board are we running on? (0 = A, 1 = B, etc.)
 
+    hid_keyboard_report_t local_kbd_states[MAX_DEVICES]; // Store keyboard states
+    hid_keyboard_report_t remote_kbd_state;              // Store combined remote keyboard state
+    uint8_t max_kbd_idx;                                 // Store largest kbd_idx seen
+
     int16_t pointer_x; // Store and update the location of our mouse pointer
     int16_t pointer_y;
     int16_t mouse_buttons; // Store and update the state of mouse buttons
