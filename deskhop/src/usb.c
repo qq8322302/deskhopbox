@@ -11,6 +11,9 @@
 
 #include "main.h"
 
+_Static_assert(MAX_DEVICES <= CFG_TUH_DEVICE_MAX,
+               "MAX_DEVICES must not exceed CFG_TUH_DEVICE_MAX");
+
 /* ================================================== *
  * ===========  TinyUSB Device Callbacks  =========== *
  * ================================================== */
@@ -93,6 +96,25 @@ void tud_umount_cb(void) {
     global_state.tud_connected = false;
 }
 
+#ifdef DH_DEBUG_CDC_FLASH
+void tud_cdc_rx_cb(uint8_t itf) {
+    char buf[64];
+    uint32_t count = tud_cdc_n_available(itf);
+
+    if (count == 0)
+        return;
+
+    if (count > sizeof(buf))
+        count = sizeof(buf);
+
+    tud_cdc_n_read(itf, buf, count);
+
+    if (count >= 5 && memcmp(buf, "flash", 5) == 0) {
+        reset_usb_boot(0, 0);
+    }
+}
+#endif
+
 /* ================================================== *
  * ===============  USB HOST Section  =============== *
  * ================================================== */
@@ -100,7 +122,7 @@ void tud_umount_cb(void) {
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
     uint8_t itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
 
-    if (dev_addr >= MAX_DEVICES || instance > MAX_INTERFACES)
+    if (dev_addr > MAX_DEVICES || instance >= MAX_INTERFACES)
         return;
 
     hid_interface_t *iface = &global_state.iface[dev_addr-1][instance];
@@ -111,6 +133,7 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
             break;
 
         case HID_ITF_PROTOCOL_MOUSE:
+            global_state.mouse_connected = false;
             break;
     }
 
@@ -122,17 +145,13 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
 void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *desc_report, uint16_t desc_len) {
     uint8_t itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
 
-    if (dev_addr >= MAX_DEVICES || instance > MAX_INTERFACES)
+    if (dev_addr > MAX_DEVICES || instance >= MAX_INTERFACES)
         return;
 
     /* Get interface information */
     hid_interface_t *iface = &global_state.iface[dev_addr-1][instance];
 
     iface->protocol = tuh_hid_get_protocol(dev_addr, instance);
-
-    /* Safeguard against memory corruption in case the number of instances exceeds our maximum */
-    if (instance >= MAX_INTERFACES)
-        return;
 
     /* Parse the report descriptor into our internal structure. */
     parse_report_descriptor(iface, desc_report, desc_len);
@@ -155,16 +174,30 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *desc_re
             if (global_state.config.enforce_ports && BOARD_ROLE == OUTPUT_A)
                 return;
 
-            /* Switch to using report protocol instead of boot, it's more complicated but
-               at least we get all the information we need (looking at you, mouse wheel) */
-            if (tuh_hid_get_protocol(dev_addr, instance) == HID_PROTOCOL_BOOT) {
-                tuh_hid_set_protocol(dev_addr, instance, HID_PROTOCOL_REPORT);
+            if (global_state.config.force_mouse_boot_mode) {
+                /* User requested boot mode - simpler protocol for compatibility.
+                   Note: many mice still send wheel data even in boot mode. */
+                tuh_hid_set_protocol(dev_addr, instance, HID_PROTOCOL_BOOT);
+            } else {
+                /* Switch to using report protocol instead of boot, it's more complicated but
+                   at least we get all the information we need (looking at you, mouse wheel) */
+                if (tuh_hid_get_protocol(dev_addr, instance) == HID_PROTOCOL_BOOT) {
+                    tuh_hid_set_protocol(dev_addr, instance, HID_PROTOCOL_REPORT);
+                }
             }
+            global_state.mouse_connected = true;
             break;
 
         case HID_ITF_PROTOCOL_NONE:
             break;
     }
+
+    /* Also set mouse_connected if report descriptor contains mouse, even if interface
+       protocol says keyboard. This handles composite devices like QMK. */
+    if (iface->mouse.is_found) {
+        global_state.mouse_connected = true;
+    }
+
     /* Flash local led to indicate a device was connected */
     blink_led(&global_state);
 
@@ -179,14 +212,10 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *desc_re
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *report, uint16_t len) {
     uint8_t const itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
 
-    if (dev_addr >= MAX_DEVICES || instance > MAX_INTERFACES)
+    if (dev_addr > MAX_DEVICES || instance >= MAX_INTERFACES)
         return;
 
     hid_interface_t *iface = &global_state.iface[dev_addr-1][instance];
-
-    /* Safeguard against memory corruption in case the number of instances exceeds our maximum */
-    if (instance >= MAX_INTERFACES)
-        return;
 
     /* Calculate a device index that distinguishes between different devices
        while staying within the bounds of MAX_DEVICES.
@@ -242,7 +271,7 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
 
 /* Set protocol in a callback. This is tied to an interface, not a specific report ID */
 void tuh_hid_set_protocol_complete_cb(uint8_t dev_addr, uint8_t idx, uint8_t protocol) {
-    if (dev_addr >= MAX_DEVICES || idx > MAX_INTERFACES)
+    if (dev_addr > MAX_DEVICES || idx > MAX_INTERFACES)
         return;
 
     hid_interface_t *iface = &global_state.iface[dev_addr-1][idx];

@@ -20,11 +20,11 @@
 #define HID_DEFAULT_NUM_COLLECTIONS 16
 #define HID_MAX_USAGES              128
 #define MAX_CC_BUTTONS              16
-#define MAX_DEVICES                 3
-#define MAX_INTERFACES              6
+#define MAX_DEVICES                 4
+#define MAX_INTERFACES              12  // Per device; allows for complex devices like QMK
 #define MAX_KEYS                    32
 #define MAX_REPORTS                 24
-#define MAX_KEYBOARDS               3
+#define MAX_KEYBOARDS               5
 #define MAX_SYS_BUTTONS             8
 #define PRIMARY_KEYBOARD            0
 /*==============================================================================
@@ -37,6 +37,12 @@ typedef struct {
     uint8_t start;
     uint8_t end;
 } collection_t;
+
+/* Maps a report ID to its current bit offset */
+typedef struct {
+    uint8_t report_id;
+    uint32_t offset_in_bits;
+} report_offset_map_t;
 
 /* Header byte is unpacked to size/type/tag using this struct */
 typedef struct TU_ATTR_PACKED {
@@ -149,12 +155,14 @@ typedef struct {
     int report_id; /* Report ID of the current section we're parsing */
 
     uint32_t usage_count;
-    uint32_t offset_in_bits;
     uint16_t usages[HID_MAX_USAGES];
     uint16_t *p_usage;
     uint16_t global_usage;
 
     collection_t collection;
+
+    report_offset_map_t report_offsets[MAX_REPORTS];
+    uint8_t num_report_offsets;
 
     /* as tag is 4 bits, there can be 16 different tags in global header type */
     item_t globals[16];
